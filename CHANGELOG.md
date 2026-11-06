@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-11-06
+
 ### Changed
 - **BREAKING: `Agent`, `SubagentWorkflow`, `get_subagent_result` and `steer_subagent` are reached through `codemode` instead of being declared to the model.** The four declarations cost about 32k characters of every request. They now register with `codemode` exposure under one `subagents` namespace, and the guidance their dropped `promptGuidelines` carried moves to a `<subagents>` system prompt section. The model calls them from codemode scripts; `SubagentWorkflow` exceeds codemode's listing budget, so `searchTools()` finds it. Set `SUBAGENTS_TOOL_EXPOSURE` in `src/index.ts` back to `"direct"` for the previous behavior. The print-mode and workflow e2e suites still drive the tools as declared tool calls and fail against this change.
 

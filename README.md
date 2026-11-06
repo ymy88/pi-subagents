@@ -1,23 +1,43 @@
-# @tintinweb/pi-subagents
+# @ymy88/pi-subagents
+
+> **This is a fork, and it changes one thing.**
+> [`@ymy88/pi-subagents`](https://github.com/ymy88/pi-subagents) tracks
+> [`@tintinweb/pi-subagents`](https://github.com/tintinweb/pi-subagents) and registers this extension's four
+> tools — `Agent`, `SubagentWorkflow`, `get_subagent_result`, `steer_subagent` — with **`codemode` exposure**
+> instead of declaring them to the model. Nothing declares them, and the model reaches them from codemode
+> scripts (`await tools.Agent({ ... })`) under one `subagents` namespace.
+>
+> **Why:** those four declarations cost about 32k characters on every request, more than half of this
+> extension's tool surface and roughly a fifth of the whole system prompt. They bought nothing unless the
+> model was spawning a subagent that turn. `codemode` exposure is the same trade pi's own MCP support makes
+> for server tools: registered and callable, never declared. Measured on a comparable session, tool
+> declarations fell from 38,609 to 16,825 characters. The rest of the saving is bounded by codemode's
+> listing budget — `SubagentWorkflow` exceeds it and is found with `searchTools()`.
+>
+> **What it costs:** the tools' `promptGuidelines` no longer reach the system prompt, so they move to a
+> `<subagents>` section that states the same guidance — the shape MCP uses for `<mcp_servers>`. The model
+> must call the tools from a codemode script rather than as a direct tool call. Set
+> `SUBAGENTS_TOOL_EXPOSURE` in `src/index.ts` to `"direct"` to get the upstream behavior back.
+>
+> Everything else is upstream's work, unmodified. Fork maintained by [@ymy88](https://github.com/ymy88).
+> Upstream remains the place for this project's issues and most of its documentation.
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/tintinweb/pi-subagents/raw/master/media/logo-dark.svg">
-    <img src="https://github.com/tintinweb/pi-subagents/raw/master/media/logo-light.svg" alt="@tintinweb/pi-subagents" width="520">
+    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/ymy88/pi-subagents/raw/master/media/logo-dark.svg">
+    <img src="https://github.com/ymy88/pi-subagents/raw/master/media/logo-light.svg" alt="@ymy88/pi-subagents" width="520">
   </picture>
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@tintinweb/pi-subagents"><img src="https://img.shields.io/npm/v/@tintinweb/pi-subagents?color=cb3837&logo=npm" alt="npm version"></a>
-  <a href="https://www.npmjs.com/package/@tintinweb/pi-subagents"><img src="https://img.shields.io/npm/dm/@tintinweb/pi-subagents" alt="npm downloads"></a>
-  <a href="https://github.com/tintinweb/pi-subagents/actions/workflows/ci.yml"><img src="https://github.com/tintinweb/pi-subagents/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
-  <a href="https://github.com/tintinweb/pi-subagents/blob/master/LICENSE"><img src="https://img.shields.io/npm/l/@tintinweb/pi-subagents" alt="License: MIT"></a>
+  <a href="https://www.npmjs.com/package/@ymy88/pi-subagents"><img src="https://img.shields.io/npm/v/@ymy88/pi-subagents?color=cb3837&logo=npm" alt="npm version"></a>
+  <a href="https://www.npmjs.com/package/@ymy88/pi-subagents"><img src="https://img.shields.io/npm/dm/@ymy88/pi-subagents" alt="npm downloads"></a>
+  <a href="https://github.com/ymy88/pi-subagents/commits/master"><img src="https://img.shields.io/github/last-commit/ymy88/pi-subagents" alt="Last commit"></a>
 </p>
 <p align="center">
   <a href="https://pi.dev"><img src="https://img.shields.io/badge/pi-%E2%89%A5%201.1.0-6f42c1" alt="Requires pi >= 1.1.0"></a>
-  <a href="https://pi.dev/packages/@tintinweb/pi-subagents"><img src="https://img.shields.io/badge/pi.dev-package-5b5bd6" alt="pi.dev package"></a>
+  <a href="https://pi.dev/packages/@ymy88/pi-subagents"><img src="https://img.shields.io/badge/pi.dev-package-5b5bd6" alt="pi.dev package"></a>
   <img src="https://img.shields.io/badge/Claude%20Code-compatible%20tools%20%26%20workflows-d97757" alt="Claude Code compatible">
-  <a href="https://github.com/tintinweb/pi-subagents/commits/master"><img src="https://img.shields.io/github/last-commit/tintinweb/pi-subagents" alt="Last commit"></a>
 </p>
 
 <h3 align="center">Claude Code-style sub-agents and workflow orchestration for pi.</h3>
@@ -29,15 +49,15 @@
   <a href="#custom-agents"><b>Custom Agents</b></a> ·
   <a href="#tools"><b>Tools</b></a> ·
   <a href="#persistent-settings"><b>Settings</b></a> ·
-  <a href="https://github.com/tintinweb/pi-subagents/blob/master/docs/workflows.md"><b>Workflows</b></a> ·
-  <a href="https://github.com/tintinweb/pi-subagents/blob/master/CHANGELOG.md"><b>Changelog</b></a>
+  <a href="https://github.com/ymy88/pi-subagents/blob/master/docs/workflows.md"><b>Workflows</b></a> ·
+  <a href="https://github.com/ymy88/pi-subagents/blob/master/CHANGELOG.md"><b>Changelog</b></a>
 </p>
 
-<p align="center"><code>pi install npm:@tintinweb/pi-subagents</code></p>
+<p align="center"><code>pi install npm:@ymy88/pi-subagents</code></p>
 
 A [pi](https://pi.dev) extension that brings **Claude Code-style autonomous sub-agents and workflow orchestration** to pi. Spawn specialized agents that run in isolated sessions — each with its own tools, system prompt, model, and thinking level. Run them in the background (the default) or block on them, steer them mid-run, resume completed sessions, and define your own custom agent types. When the orchestration shouldn't be improvised, hand a deterministic JavaScript script to the `SubagentWorkflow` tool — `agent()`, `parallel()`, `pipeline()` — and scripts written for Claude Code's `Workflow` tool run here unchanged.
 
-<img width="600" alt="pi-subagents screenshot" src="https://github.com/tintinweb/pi-subagents/raw/master/media/screenshot.png" />
+<img width="600" alt="pi-subagents screenshot" src="https://github.com/ymy88/pi-subagents/raw/master/media/screenshot.png" />
 
 
 https://github.com/user-attachments/assets/8685261b-9338-4fea-8dfe-1c590d5df543
@@ -76,7 +96,13 @@ https://github.com/user-attachments/assets/8685261b-9338-4fea-8dfe-1c590d5df543
 ## Install
 
 ```bash
-pi install npm:@tintinweb/pi-subagents
+pi install npm:@ymy88/pi-subagents
+```
+
+Or install the fork from git, which picks up commits without a release:
+
+```bash
+pi install git:github.com/ymy88/pi-subagents
 ```
 
 Or load directly for development:
