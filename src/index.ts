@@ -300,6 +300,34 @@ export function formatToolsSuffix(cfg: AgentConfig | undefined): string {
 export const WORKFLOW_FILE_FLAG = "subagents-workflow-file";
 
 /**
+ * Exposure for this extension's own tools. `codemode` keeps them out of the
+ * model's tool list while leaving them callable from codemode scripts, the way
+ * pi's MCP extension handles its servers. Set to `"direct"` to declare them to
+ * the model again, at the cost of ~32k characters of tool declarations.
+ */
+const SUBAGENTS_TOOL_EXPOSURE = "codemode" as const;
+
+/** Groups the four tools under one heading in codemode's description. */
+const SUBAGENTS_NAMESPACE = {
+  name: "subagents",
+  description: "Launch sub-agents (Agent) to isolate context or parallelize research; SubagentWorkflow for multi-stage orchestration.",
+} as const;
+
+/** Name of the system prompt section listing these tools. */
+const SUBAGENTS_SECTION = "subagents";
+
+/**
+ * What the model needs to know about tools it can no longer see. Their own
+ * `promptGuidelines` never reach the prompt under `codemode` exposure, so they
+ * are stated here, as the MCP extension does for its servers.
+ */
+const SUBAGENTS_GUIDANCE = `Subagents are not declared to you. Call \`Agent\`, \`SubagentWorkflow\`, \`get_subagent_result\` and \`steer_subagent\` from codemode scripts.
+- Agent: launch sub-agents for complex multi-step tasks. Valuable for parallelizing independent queries or protecting the main context window from excessive results, but not when a direct tool would do. Do not duplicate work a subagent is already doing.
+- SubagentWorkflow: when the number of agents depends on something discovered at runtime, when work flows through stages, or when findings should be independently verified. Prefer \`pipeline\` over \`parallel\` — a barrier costs wall-clock whenever the stages are unevenly sized.
+- Background agents notify you when they finish — do not poll or sleep waiting for them.
+- Trust but verify: a summary describes intent, not outcome. When an agent writes or edits code, check the actual changes before reporting work as done.`;
+
+/**
  * Re-exported from where they now live, because this is where they were
  * defined and a consumer (or a test) that matched a session entry on
  * {@link WORKFLOW_ENTRY_TYPE} imports it from here.
@@ -809,6 +837,24 @@ export default function (pi: ExtensionAPI) {
   /** Whether the `@handle` autocomplete wrapper has been stacked on pi's provider. */
   let mentionProviderRegistered = false;
 
+  /**
+   * Our tools are `codemode` exposure, so nothing declares them and the
+   * `codemode` tool is the only way in. Activate it unless a host already did:
+   * MCP does this for its own servers, but a `--tools` allowlist or a session
+   * with no MCP server may have left it out, and then our tools are unreachable.
+   * A host without the `codemode` tool at all (print mode, RPC, an SDK session)
+   * is left untouched.
+   */
+  function ensureCodemodeActive(): void {
+    try {
+      if (!pi.getAllTools().some(tool => tool.name === "codemode")) return;
+      const active = pi.getActiveTools();
+      if (!active.includes("codemode")) pi.setActiveTools([...active, "codemode"]);
+    } catch {
+      // getAllTools/setActiveTools are unavailable in some hosts (print mode, RPC).
+    }
+  }
+
   // ---- Subagent scheduler ----
   // Session-scoped: store is constructed inside session_start once sessionId
   // is available. Mirrors pi-chonky-tasks's session-scoped task store —
@@ -906,6 +952,15 @@ export default function (pi: ExtensionAPI) {
     // exists. Detached inside — a workflow must not hold up session startup.
     resolveWorkflowCollisions(ctx);
     runWorkflowFlag(ctx);
+    ensureCodemodeActive();
+  });
+
+  // Under `codemode` exposure our tools never reach the model's tool list, so
+  // their `promptGuidelines` are dropped with them. State the same guidance in a
+  // prompt section instead — the shape pi's MCP extension uses for `mcp_servers`.
+  pi.on("before_agent_start", event => {
+    event.systemPromptOptions.sections ??= {};
+    event.systemPromptOptions.sections[SUBAGENTS_SECTION] = SUBAGENTS_GUIDANCE;
   });
 
   // Start a mentioned agent the direct way. runAgent resolves model, thinking,
@@ -1746,6 +1801,8 @@ Terse command-style prompts produce shallow, generic work.
   const agentTool = defineTool({
     name: SUBAGENT_TOOL_NAMES.AGENT,
     label: "Agent",
+    exposure: SUBAGENTS_TOOL_EXPOSURE,
+    namespace: SUBAGENTS_NAMESPACE,
     description: agentToolDescription,
     promptSnippet: "Launch autonomous sub-agents for complex multi-step tasks",
     promptGuidelines: [
@@ -2688,6 +2745,8 @@ Terse command-style prompts produce shallow, generic work.
   const workflowTool = defineTool({
     name: SUBAGENT_TOOL_NAMES.WORKFLOW,
     label: "SubagentWorkflow",
+    exposure: SUBAGENTS_TOOL_EXPOSURE,
+    namespace: SUBAGENTS_NAMESPACE,
     description: renderToolDescriptionTemplate(fullWorkflowToolDescription),
     promptSnippet: "Run a deterministic script that orchestrates many subagents",
     promptGuidelines: [
@@ -3012,6 +3071,8 @@ Terse command-style prompts produce shallow, generic work.
   registerToolReportingUsage(defineTool({
     name: SUBAGENT_TOOL_NAMES.GET_RESULT,
     label: "Get Agent Result",
+    exposure: SUBAGENTS_TOOL_EXPOSURE,
+    namespace: SUBAGENTS_NAMESPACE,
     description:
       "Check status and retrieve a background agent's full result — its completion notification carries only a preview. Use the agent ID returned by Agent.",
     promptSnippet: "Check status and retrieve results from a background agent",
@@ -3114,6 +3175,8 @@ Terse command-style prompts produce shallow, generic work.
   registerToolReportingUsage(defineTool({
     name: SUBAGENT_TOOL_NAMES.STEER,
     label: "Steer Agent",
+    exposure: SUBAGENTS_TOOL_EXPOSURE,
+    namespace: SUBAGENTS_NAMESPACE,
     description:
       "Send a steering message to a running agent. The message will interrupt the agent after its current tool execution " +
       "and be injected into its conversation, allowing you to redirect its work mid-run. Only works on running agents.",

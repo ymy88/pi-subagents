@@ -511,6 +511,9 @@ Four rules define the feature:
 **Full guide:** [`docs/packages.md`](https://github.com/tintinweb/pi-subagents/blob/master/docs/packages.md) — manifest syntax and the four accepted spellings, `!` exclusions, the development loop, naming, precedence, and troubleshooting.
 
 ## Tools
+
+The four tools below are registered with `codemode` exposure, the way pi's own MCP support registers server tools: they are not declared to the model, and the model reaches them from codemode scripts (`await tools.Agent({ ... })`). That keeps about 32k characters of declarations out of every request. What their `promptGuidelines` used to carry is a `<subagents>` system prompt section instead, and codemode lists the tools under a `subagents` namespace — `SubagentWorkflow` does not fit that listing's token budget, so `searchTools()` finds it. Change `SUBAGENTS_TOOL_EXPOSURE` in `src/index.ts` to `"direct"` to declare them to the model again.
+
 ### `Agent`
 
 Launch a sub-agent.
